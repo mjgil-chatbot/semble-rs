@@ -16,6 +16,22 @@ use crate::types::{CallType, Chunk, IndexStats, Result, SearchMode, SearchResult
 
 const MAX_FILE_BYTES: u64 = 1_000_000;
 
+pub trait RelatedSeed {
+    fn as_chunk(&self) -> &Chunk;
+}
+
+impl RelatedSeed for Chunk {
+    fn as_chunk(&self) -> &Chunk {
+        self
+    }
+}
+
+impl RelatedSeed for SearchResult {
+    fn as_chunk(&self) -> &Chunk {
+        &self.chunk
+    }
+}
+
 #[derive(Debug)]
 pub struct SembleIndex {
     pub chunks: Vec<Chunk>,
@@ -104,6 +120,48 @@ impl SembleIndex {
     }
 
     pub fn from_git(url: &str, git_ref: Option<&str>, include_text_files: bool) -> Result<Self> {
+        Self::from_git_with_model(url, git_ref, None, include_text_files, None)
+    }
+
+    /// Clone a git repository and index it using a caller-supplied model path.
+    pub fn from_git_with_model(
+        url: &str,
+        git_ref: Option<&str>,
+        model_path: Option<&str>,
+        include_text_files: bool,
+        extra_extensions: Option<&[String]>,
+    ) -> Result<Self> {
+        let model: Arc<dyn Encoder> = Arc::new(Model2VecEncoder::load(model_path)?);
+        Self::from_git_with_arc_encoder(url, git_ref, model, include_text_files, extra_extensions)
+    }
+
+    /// Clone a git repository and index it using a custom encoder.
+    pub fn from_git_with_encoder<E>(
+        url: &str,
+        git_ref: Option<&str>,
+        encoder: E,
+        include_text_files: bool,
+        extra_extensions: Option<&[String]>,
+    ) -> Result<Self>
+    where
+        E: Encoder + 'static,
+    {
+        Self::from_git_with_arc_encoder(
+            url,
+            git_ref,
+            Arc::new(encoder),
+            include_text_files,
+            extra_extensions,
+        )
+    }
+
+    fn from_git_with_arc_encoder(
+        url: &str,
+        git_ref: Option<&str>,
+        model: Arc<dyn Encoder>,
+        include_text_files: bool,
+        extra_extensions: Option<&[String]>,
+    ) -> Result<Self> {
         let tmp = std::env::temp_dir().join(format!(
             "semble-rs-{}-{}",
             std::process::id(),
@@ -118,7 +176,7 @@ impl SembleIndex {
         if let Some(git_ref) = git_ref {
             cmd.arg("--branch").arg(git_ref);
         }
-        cmd.arg(url).arg(&tmp);
+        cmd.arg("--").arg(url).arg(&tmp);
         let output = cmd
             .output()
             .map_err(|e| SembleError::Git(format!("failed to run git clone: {e}")))?;
@@ -130,7 +188,8 @@ impl SembleIndex {
                 stderr.trim()
             )));
         }
-        let indexed = Self::from_path_with_options(&tmp, include_text_files, None);
+        let indexed =
+            Self::from_path_with_arc_encoder(&tmp, model, include_text_files, extra_extensions);
         let _ = fs::remove_dir_all(&tmp);
         indexed
     }
@@ -245,8 +304,15 @@ impl SembleIndex {
         results
     }
 
+    pub fn find_related<S>(&self, source: &S, top_k: usize) -> Vec<SearchResult>
+    where
+        S: RelatedSeed + ?Sized,
+    {
+        self.find_related_chunk(source.as_chunk(), top_k)
+    }
+
     pub fn find_related_result(&self, source: &SearchResult, top_k: usize) -> Vec<SearchResult> {
-        self.find_related_chunk(&source.chunk, top_k)
+        self.find_related(source, top_k)
     }
 
     fn selector_vector(

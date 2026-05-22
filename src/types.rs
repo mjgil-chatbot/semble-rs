@@ -34,7 +34,7 @@ impl FromStr for SearchMode {
             "hybrid" => Ok(SearchMode::Hybrid),
             "semantic" => Ok(SearchMode::Semantic),
             "bm25" => Ok(SearchMode::Bm25),
-            other => Err(format!("unknown search mode: {other}")),
+            other => Err(format!("Unknown search mode: {other:?}")),
         }
     }
 }
@@ -97,6 +97,7 @@ pub enum SembleError {
     NoSupportedFiles(String),
     Git(String),
     InvalidMode(String),
+    Message(String),
 }
 
 impl fmt::Display for SembleError {
@@ -108,7 +109,8 @@ impl fmt::Display for SembleError {
             SembleError::NotADirectory(p) => write!(f, "Path is not a directory: {p}"),
             SembleError::NoSupportedFiles(p) => write!(f, "No supported files found under {p}."),
             SembleError::Git(msg) => write!(f, "{msg}"),
-            SembleError::InvalidMode(mode) => write!(f, "Unknown search mode: {mode}"),
+            SembleError::InvalidMode(mode) => write!(f, "{mode}"),
+            SembleError::Message(message) => write!(f, "{message}"),
         }
     }
 }

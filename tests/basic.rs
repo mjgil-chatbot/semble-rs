@@ -35,8 +35,34 @@ fn end_to_end_search_and_find_related() {
     assert!(results.iter().any(|r| r.chunk.file_path == "auth.py"));
 
     let chunk = resolve_chunk(&index.chunks, "auth.py", 1).unwrap();
-    let related = index.find_related_chunk(chunk, 3);
+    let related = index.find_related(chunk, 3);
     assert!(related.len() <= 3);
+
+    let first = results.first().unwrap();
+    assert_eq!(
+        index
+            .find_related(first, 3)
+            .into_iter()
+            .map(|r| r.chunk.file_path)
+            .collect::<Vec<_>>(),
+        index
+            .find_related(chunk, 3)
+            .into_iter()
+            .map(|r| r.chunk.file_path)
+            .collect::<Vec<_>>()
+    );
+
+    let filtered = index
+        .search_with_options(
+            "authenticate token",
+            3,
+            SearchMode::Hybrid,
+            None,
+            None,
+            Some(&["auth.py".to_string()]),
+        )
+        .unwrap();
+    assert!(filtered.iter().all(|r| r.chunk.file_path == "auth.py"));
 
     let _ = fs::remove_dir_all(root);
 }

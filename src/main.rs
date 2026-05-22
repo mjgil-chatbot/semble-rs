@@ -10,36 +10,37 @@ use semble_rs::SembleIndex;
 
 fn main() {
     if let Err(err) = run() {
-        eprintln!("error: {err}");
+        eprintln!("{err}");
         std::process::exit(1);
     }
 }
 
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let output = run_with_args(&args)?;
+    if !output.is_empty() {
+        println!("{output}");
+    }
+    Ok(())
+}
+
+fn run_with_args(args: &[String]) -> Result<String> {
     if args.is_empty() {
-        print_help();
-        return Ok(());
+        return Ok(help_text());
     }
     match args[0].as_str() {
         "search" => cmd_search(&args[1..]),
         "find-related" => cmd_find_related(&args[1..]),
         "init" => cmd_init(&args[1..]),
         "savings" => cmd_savings(&args[1..]),
-        "-h" | "--help" | "help" => {
-            print_help();
-            Ok(())
-        }
-        other => Err(SembleError::InvalidMode(format!(
-            "unknown command: {other}"
-        ))),
+        "-h" | "--help" | "help" => Ok(help_text()),
+        other => Err(SembleError::Message(format!("unknown command: {other}"))),
     }
 }
 
-fn cmd_search(args: &[String]) -> Result<()> {
+fn cmd_search(args: &[String]) -> Result<String> {
     if args.is_empty() || has_help(args) {
-        print_search_help();
-        return Ok(());
+        return Ok(search_help_text());
     }
     let query = args[0].clone();
     let mut path = ".".to_string();
@@ -64,7 +65,7 @@ fn cmd_search(args: &[String]) -> Result<()> {
             }
             "--include-text-files" => include_text_files = true,
             other => {
-                return Err(SembleError::InvalidMode(format!(
+                return Err(SembleError::Message(format!(
                     "unknown search option: {other}"
                 )));
             }
@@ -75,25 +76,23 @@ fn cmd_search(args: &[String]) -> Result<()> {
     let index = load_index(&path, include_text_files)?;
     let results = index.search(&query, top_k, mode)?;
     if results.is_empty() {
-        println!("No results found.");
+        Ok("No results found.".to_string())
     } else {
-        println!(
-            "{}",
-            format_results(&format!("Search results for {query:?}"), &results)
-        );
+        Ok(format_results(
+            &format!("Search results for: {} (mode={mode})", python_repr(&query)),
+            &results,
+        ))
     }
-    Ok(())
 }
 
-fn cmd_find_related(args: &[String]) -> Result<()> {
+fn cmd_find_related(args: &[String]) -> Result<String> {
     if args.len() < 2 || has_help(args) {
-        print_find_related_help();
-        return Ok(());
+        return Ok(find_related_help_text());
     }
     let file_path = args[0].clone();
     let line: usize = args[1]
         .parse()
-        .map_err(|_| SembleError::InvalidMode(format!("invalid line number: {}", args[1])))?;
+        .map_err(|_| SembleError::Message(format!("invalid line number: {}", args[1])))?;
     let mut path = ".".to_string();
     let mut top_k = 5usize;
     let mut include_text_files = false;
@@ -110,7 +109,7 @@ fn cmd_find_related(args: &[String]) -> Result<()> {
             }
             "--include-text-files" => include_text_files = true,
             other => {
-                return Err(SembleError::InvalidMode(format!(
+                return Err(SembleError::Message(format!(
                     "unknown find-related option: {other}"
                 )));
             }
@@ -120,27 +119,26 @@ fn cmd_find_related(args: &[String]) -> Result<()> {
 
     let index = load_index(&path, include_text_files)?;
     let Some(chunk) = resolve_chunk(&index.chunks, &file_path, line) else {
-        return Err(SembleError::InvalidMode(format!(
-            "No chunk found at {file_path}:{line}"
+        return Err(SembleError::Message(format!(
+            "No chunk found at {file_path}:{line}."
         )));
     };
-    let results = index.find_related_chunk(chunk, top_k);
+    let results = index.find_related(chunk, top_k);
     if results.is_empty() {
-        println!("No related chunks found.");
+        Ok(format!("No related chunks found for {file_path}:{line}."))
     } else {
-        println!(
-            "{}",
-            format_results(&format!("Related chunks for {file_path}:{line}"), &results)
-        );
+        Ok(format_results(
+            &format!("Chunks related to {file_path}:{line}"),
+            &results,
+        ))
     }
-    Ok(())
 }
 
-fn cmd_init(args: &[String]) -> Result<()> {
+fn cmd_init(args: &[String]) -> Result<String> {
     let force = args.iter().any(|a| a == "--force" || a == "-f");
     let dest = Path::new(".claude").join("agents").join("semble-search.md");
     if dest.exists() && !force {
-        return Err(SembleError::InvalidMode(format!(
+        return Err(SembleError::Message(format!(
             "{} already exists. Run with --force to overwrite.",
             dest.display()
         )));
@@ -149,14 +147,12 @@ fn cmd_init(args: &[String]) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     fs::write(&dest, SEMBLE_SEARCH_AGENT)?;
-    println!("Created {}", dest.display());
-    Ok(())
+    Ok(format!("Created {}", dest.display()))
 }
 
-fn cmd_savings(args: &[String]) -> Result<()> {
+fn cmd_savings(args: &[String]) -> Result<String> {
     let verbose = args.iter().any(|a| a == "--verbose" || a == "-v");
-    println!("{}", format_savings_report(None, verbose));
-    Ok(())
+    Ok(format_savings_report(None, verbose))
 }
 
 fn load_index(path: &str, include_text_files: bool) -> Result<SembleIndex> {
@@ -179,26 +175,91 @@ fn has_help(args: &[String]) -> bool {
     args.iter().any(|a| a == "-h" || a == "--help")
 }
 
-fn print_help() {
-    println!(
-        "semble — local hybrid code search for agents\n\n\
+fn python_repr(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('\'', "\\'");
+    format!("'{escaped}'")
+}
+
+fn help_text() -> String {
+    "semble — local hybrid code search for agents\n\n\
 Usage:\n\
   semble search <query> [path] [--top-k N] [--mode hybrid|semantic|bm25] [--include-text-files]\n\
   semble find-related <file_path> <line> [path] [--top-k N] [--include-text-files]\n\
   semble init [--force]\n\
   semble savings [--verbose]\n\n\
 When path is omitted, the current directory is indexed. Local paths and https/http/file git URLs are accepted."
-    );
+        .to_string()
 }
 
-fn print_search_help() {
-    println!(
-        "Usage: semble search <query> [path] [--top-k N] [--mode hybrid|semantic|bm25] [--include-text-files]"
-    );
+fn search_help_text() -> String {
+    "Usage: semble search <query> [path] [--top-k N] [--mode hybrid|semantic|bm25] [--include-text-files]"
+        .to_string()
 }
 
-fn print_find_related_help() {
-    println!(
-        "Usage: semble find-related <file_path> <line> [path] [--top-k N] [--include-text-files]"
-    );
+fn find_related_help_text() -> String {
+    "Usage: semble find-related <file_path> <line> [path] [--top-k N] [--include-text-files]"
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use semble_rs::types::{Chunk, SearchMode, SearchResult};
+    use semble_rs::utils::format_results;
+
+    use super::{find_related_help_text, help_text, python_repr, run_with_args, search_help_text};
+
+    fn chunk(path: &str, content: &str) -> Chunk {
+        Chunk {
+            content: content.to_string(),
+            file_path: path.to_string(),
+            start_line: 1,
+            end_line: 2,
+            language: Some("python".to_string()),
+        }
+    }
+
+    #[test]
+    fn search_output_matches_python_header_shape() {
+        let result = SearchResult {
+            chunk: chunk("src/foo.py", "def foo():\n    return 1"),
+            score: 0.9,
+            source: SearchMode::Hybrid,
+        };
+        let rendered = format_results("Search results for: 'query text' (mode=hybrid)", &[result]);
+        assert!(rendered.starts_with(
+            "Search results for: 'query text' (mode=hybrid)\n\n## 1. src/foo.py:1-2  [score=0.900]"
+        ));
+    }
+
+    #[test]
+    fn related_output_matches_python_header_shape() {
+        let result = SearchResult {
+            chunk: chunk("src/bar.py", "class Bar:\n    pass"),
+            score: 0.8,
+            source: SearchMode::Semantic,
+        };
+        let rendered = format_results("Chunks related to src/bar.py:1", &[result]);
+        assert!(rendered
+            .starts_with("Chunks related to src/bar.py:1\n\n## 1. src/bar.py:1-2  [score=0.800]"));
+    }
+
+    #[test]
+    fn help_dispatch_returns_usage_text() {
+        assert!(help_text().contains("semble search <query>"));
+        assert!(search_help_text().contains("semble search <query>"));
+        assert!(find_related_help_text().contains("semble find-related <file_path> <line>"));
+    }
+
+    #[test]
+    fn no_args_returns_help() {
+        assert!(run_with_args(&[])
+            .unwrap()
+            .contains("local hybrid code search"));
+    }
+
+    #[test]
+    fn python_repr_matches_single_quoted_cli_headers() {
+        assert_eq!(python_repr("query text"), "'query text'");
+        assert_eq!(python_repr("it's"), "'it\\'s'");
+    }
 }

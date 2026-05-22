@@ -18,6 +18,10 @@ pub mod tokens;
 pub mod types;
 pub mod utils;
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub type EmbeddingMatrix = Vec<Vec<f32>>;
+
 pub use dense::{Encoder, Model2VecEncoder, DEFAULT_MODEL_NAME};
-pub use index::SembleIndex;
+pub use index::{RelatedSeed, SembleIndex};
 pub use types::{CallType, Chunk, IndexStats, SearchMode, SearchResult};
