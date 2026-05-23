@@ -45,3 +45,17 @@ The current cases are:
 - `find-related`
 
 The script fails when normalized command output diverges or when Rust median latency regresses beyond the configured ratio threshold versus the Python reference.
+
+## Generated-artifact exclusions
+
+Repo-root indexing now ignores the same generated artifact classes that caused
+the `servolink` failure investigation to wander into Cargo depfiles and other
+non-source trees. The default walker excludes:
+
+- `target/`
+- `target-*/`
+- `*-target/`
+- `.lightweight-test/`
+
+Those defaults are implemented in `src/file_walker.rs` so CLI searches stay
+focused on repo-owned source inputs instead of build outputs.

@@ -2,24 +2,28 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const DEFAULT_IGNORED_DIRS: &[&str] = &[
-    ".git",
-    ".hg",
-    ".svn",
-    "__pycache__",
-    "node_modules",
-    ".venv",
-    "venv",
-    ".tox",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".cache",
-    ".semble",
-    ".next",
-    "dist",
-    "build",
-    ".eggs",
+const DEFAULT_IGNORED_PATTERNS: &[&str] = &[
+    ".git/",
+    ".hg/",
+    ".svn/",
+    "__pycache__/",
+    "node_modules/",
+    ".venv/",
+    "venv/",
+    ".tox/",
+    ".mypy_cache/",
+    ".pytest_cache/",
+    ".ruff_cache/",
+    ".cache/",
+    ".semble/",
+    ".next/",
+    "dist/",
+    "build/",
+    ".eggs/",
+    "target/",
+    "target-*/",
+    "*-target/",
+    ".lightweight-test/",
 ];
 
 #[derive(Clone, Debug)]
@@ -37,10 +41,10 @@ pub fn walk_files(
 ) -> std::io::Result<Vec<PathBuf>> {
     let ext_set: BTreeSet<String> = extensions.iter().map(|e| e.to_ascii_lowercase()).collect();
     let mut patterns = Vec::new();
-    for dir in DEFAULT_IGNORED_DIRS {
+    for pattern in DEFAULT_IGNORED_PATTERNS {
         patterns.push(IgnorePattern {
             negated: false,
-            pattern: format!("{dir}/"),
+            pattern: (*pattern).to_string(),
         });
     }
     if let Some(extra) = ignore {
@@ -149,8 +153,15 @@ fn pattern_matches(pattern: &str, rel: &str, is_dir: bool) -> bool {
     }
     let pat = pat.trim_start_matches('/');
     if let Some(dir_pat) = pat.strip_suffix('/') {
-        return is_dir && rel.split('/').any(|part| part == dir_pat)
-            || rel.starts_with(&format!("{dir_pat}/"));
+        if !is_dir {
+            return false;
+        }
+        if dir_pat.contains('*') {
+            return rel.split('/').any(|part| wildcard_match(dir_pat, part));
+        }
+        return rel == dir_pat
+            || rel.starts_with(&format!("{dir_pat}/"))
+            || rel.split('/').any(|part| part == dir_pat);
     }
     if let Some(suffix) = pat.strip_prefix("*.") {
         return rel.ends_with(&format!(".{suffix}"));
@@ -214,6 +225,55 @@ mod tests {
         let files = walk_files(&root, &[".py".to_string()], None).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "a.py");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ignores_generated_target_artifacts() {
+        let root = std::env::temp_dir().join(format!(
+            "semble-rs-ignore-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("target/debug/deps")).unwrap();
+        fs::create_dir_all(root.join("target-codex-servo/debug/deps")).unwrap();
+        fs::create_dir_all(root.join("real-site-harness-target/debug/deps")).unwrap();
+        fs::create_dir_all(root.join(".lightweight-test/real-site-harness-target/debug/deps"))
+            .unwrap();
+        fs::write(root.join("src/app.py"), "print('source')").unwrap();
+        fs::write(root.join("target/debug/deps/generated.d"), "ignored").unwrap();
+        fs::write(
+            root.join("target-codex-servo/debug/deps/generated.d"),
+            "ignored",
+        )
+        .unwrap();
+        fs::write(
+            root.join("real-site-harness-target/debug/deps/generated.d"),
+            "ignored",
+        )
+        .unwrap();
+        fs::write(
+            root.join(".lightweight-test/real-site-harness-target/debug/deps/generated.d"),
+            "ignored",
+        )
+        .unwrap();
+
+        let files = walk_files(&root, &[".py".to_string(), ".d".to_string()], None).unwrap();
+        let rel_paths: Vec<String> = files
+            .iter()
+            .map(|path| {
+                path.strip_prefix(&root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+
+        assert_eq!(rel_paths, vec!["src/app.py"]);
+
         let _ = fs::remove_dir_all(root);
     }
 }
