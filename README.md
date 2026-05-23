@@ -1,5 +1,10 @@
-# semble-rs
-![Logo](imgs/semble_rs_logo.png)
+# Semble-RS
+
+<h2 align="center">
+  <img width="30%" alt="semble-rs logo" src="imgs/semble_rs_logo.png"><br/>
+  Semantic Code Search for Rust Projects<br/>
+  <sub>Rust-native implementation of Semble</sub>
+</h2>
 
 
 Strict Rust port of the core [`semble`](https://github.com/MinishLab/semble) code-search workflow.
