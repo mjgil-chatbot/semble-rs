@@ -1,4 +1,6 @@
 # semble-rs
+![Logo](imgs/semble_rs_logo.png)
+
 
 Strict Rust port of the core [`semble`](https://github.com/MinishLab/semble) code-search workflow.
 
