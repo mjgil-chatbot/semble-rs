@@ -1,4 +1,3 @@
-# Semble-RS
 
 <h2 align="center">
   <img width="30%" alt="semble-rs logo" src="imgs/semble_rs_logo.png"><br/>
