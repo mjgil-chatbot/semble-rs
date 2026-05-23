@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import statistics
 import subprocess
@@ -30,8 +31,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--python-repo",
         type=Path,
-        default=Path("/home/m/git/others/semble"),
-        help="Path to the Python semble checkout.",
+        default=None,
+        help="Path to the Python semble checkout. May also be set via SEMBLE_PYTHON_REPO.",
     )
     parser.add_argument(
         "--rust-bin",
@@ -63,6 +64,17 @@ def parse_args() -> argparse.Namespace:
         help="Emit only the JSON summary.",
     )
     return parser.parse_args()
+
+
+def resolve_python_repo(arg_value: Path | None) -> Path:
+    if arg_value is not None:
+        return arg_value.resolve()
+    raw_env = os.environ.get("SEMBLE_PYTHON_REPO")
+    if raw_env:
+        return Path(raw_env).resolve()
+    raise SystemExit(
+        "Python reference repo not configured. Pass --python-repo or set SEMBLE_PYTHON_REPO."
+    )
 
 
 def write_fixture(root: Path) -> None:
@@ -153,7 +165,7 @@ def benchmark_case(argv: list[str], warmup: int, iterations: int) -> dict[str, o
 
 def main() -> int:
     args = parse_args()
-    python_repo = args.python_repo.resolve()
+    python_repo = resolve_python_repo(args.python_repo)
     rust_bin = args.rust_bin.resolve()
     python_cli = python_repo / ".venv" / "bin" / "semble"
     if not python_repo.exists():

@@ -3,7 +3,11 @@ name = "semble-rs"
 version = "0.2.0"
 edition = "2021"
 description = "Strict Rust port of Semble: local hybrid code search for agents"
-license = "MIT"
+license = "ISC"
+repository = "https://github.com/mjgil/semble-rs"
+readme = "README.md"
+keywords = ["code-search", "search", "bm25", "tree-sitter", "agent-tools"]
+categories = ["command-line-utilities", "development-tools"]
 
 [lib]
 name = "semble_rs"

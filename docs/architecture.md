@@ -18,6 +18,8 @@ Contains parity and regression checks.
 Today that lives in `tests/` and `scripts/benchmark_parity.py`.
 Behavioral assertions that should gate `cargo test` belong in `tests/`.
 Cross-implementation checks that need the Python reference checkout stay in `scripts/`.
+The parity benchmark requires `--python-repo` or `SEMBLE_PYTHON_REPO` instead
+of assuming a machine-local checkout path.
 
 ## Current parity strategy
 

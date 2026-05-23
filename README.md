@@ -2,6 +2,10 @@
 
 Strict Rust port of the core [`semble`](https://github.com/MinishLab/semble) code-search workflow.
 
+This repository includes the Rust library, the `semble` CLI, and lightweight
+verification helpers that keep docs and metadata free of machine-local paths
+and email addresses.
+
 This port is designed to preserve the original Python retrieval pipeline rather than approximate it:
 
 - `SembleIndex::from_path` / `SembleIndex::from_git`
@@ -41,8 +45,9 @@ let index = SembleIndex::from_path_with_encoder(
 ## Build
 
 ```bash
-cargo build
-cargo test
+cargo build --release
+cargo test --release
+python3 scripts/verify_repo_hygiene.py
 ```
 
 The first default build resolves `model2vec-rs`, `tree-sitter-language-pack`, and their transitive dependencies from crates.io. The first default run may also download/cache `minishlab/potion-code-16M`.
@@ -74,6 +79,17 @@ cargo install --path .
 
 Then use `semble ...` directly.
 
+## Python parity benchmark
+
+The cross-implementation benchmark requires an explicit Python reference
+checkout instead of assuming a machine-local path:
+
+```bash
+python3 scripts/benchmark_parity.py --python-repo ../semble
+```
+
+You can also set `SEMBLE_PYTHON_REPO` in the environment and omit the flag.
+
 ## Library example
 
 ```rust
@@ -89,3 +105,10 @@ fn main() -> semble_rs::types::Result<()> {
     Ok(())
 }
 ```
+
+## License
+
+This repository is licensed under ISC. See [LICENSE](LICENSE).
+
+The preserved upstream MIT text is kept in
+[THIRD_PARTY_LICENSE](THIRD_PARTY_LICENSE).
